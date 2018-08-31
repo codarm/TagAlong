@@ -1,0 +1,181 @@
+as aSignalingreal
+CallActivity
+kind of signaling choose which way to use a signaling client basis roomId CallActivity look at it, the code is as follows:
+   // Create connection client. Use DirectRTCClient if room name is an IP otherwise use the
+    // standard WebSocketRTCClient.
+    If("firebase".equals(roomId)) {
+      Log.d(TAG, "firebase");
+      appRtcClient = New FirebaseRTCClient(this);
+    } Else If (loopback || !DirectRTCClient.IP_PATTERN.matcher(roomId).matches()) {
+      appRtcClient = New WebSocketRTCClient(this);
+    } Else {
+      Log.i(TAG, "Using DirectRTCClient because room name looks like an IP.");
+      appRtcClient = New DirectRTCClient(this);
+    }
+
+
+Originally have WebSocketRTCClient and DirectRTCClient, if it is IP, use DirectRTCClient, here I add a FirebaseRTCClient, as long as the roomId is firebase will use this (I am lazy)
+FirebaseRTCClient
+XXXRTCClient this part of the signaling part, so I refer to WebSocketRTCClient And the content of DirectRTCClient to write FirebaseRTCClient is the
+same as WebSocketRTCClinet, it must be implemented as AppRTCClient, AppRTCClient this Interface is defined as follows:
+/**
+ * AppRTCClient is the interface representing an AppRTC client.
+ */
+public Interface AppRTCClient {
+  /**
+   * Struct holding the connection parameters of an AppRTC room.
+   */
+  Class RoomConnectionParameters {
+    Public Final String roomUrl;
+    Public Final String roomId;
+    Public Final Boolean Loopback;
+    Public RoomConnectionParameters(String roomUrl, String roomId, Boolean Loopback) {
+      This.roomUrl = roomUrl;
+      This.roomId = roomId;
+      This.loopback = Loopback;
+    }
+  }
+
+  /**
+   * Asynchronously connect to an AppRTC room URL using supplied connection
+   * parameters. Once connection is established onConnectedToRoom()
+   * callback with room parameters is invoked.
+   */
+  Void connectToRoom(RoomConnectionParameters connectionParameters);
+
+  /**
+   * Send offer SDP to the other participant.
+   */
+  Void sendOfferSdp(final SessionDescription Sdp);
+
+  /**
+   * Send answer SDP to the other participant.
+   */
+  Void sendAnswerSdp(final SessionDescription Sdp);
+
+  /**
+   * Send Ice candidate to the other participant.
+   */
+  Void sendLocalIceCandidate(final IceCandidate Candid);
+
+  /**
+   * Send removed ICE candidates to the other participant.
+   */
+  Void sendLocalIceCandidateRemovals(final IceCandidate[] candidates);
+
+  /**
+   * Disconnect from room.
+   */
+  Void disconnectFromRoom();
+
+  /**
+   * Struct holding the signaling parameters of an AppRTC room.
+   */
+  Class SignalingParameters {
+    Public Final List<PeerConnection.IceServer> iceServers;
+    Public Final Boolean Initiative;
+    Public Final String clientId;
+    Public Final String wssUrl;
+    Public Final String wssPostUrl;
+    Public Final SessionDescription offerSdp;
+    Public Final List<IceCandidate> iceCandidates;
+
+    Public SignalingParameters(List<PeerConnection.IceServer> iceServers, Boolean initiator,
+        String clientId, String wssUrl, String wssPostUrl, SessionDescription offerSdp,
+        List<IceCandidate> iceCandidates) {
+      This.iceServers = iceServers;
+      this.initiator = Initiative;
+      This.clientId = clientId;
+      This.wssUrl = wssUrl;
+      This.wssPostUrl = wssPostUrl;
+      This.offerSdp = offerSdp;
+      This.iceCandidates = iceCandidates;
+    }
+  }
+
+  /**
+   * Callback interface for messages delivered on signaling channel.
+   *
+   * <p>Methods are guaranteed to be invoked on the UI thread of |activity|.
+   */
+  Interface SignalingEvents {
+    /**
+     * Callback fired once the room's signaling parameters
+     * SignalingParameters are extracted.
+     */
+    Void onConnectedToRoom(final SignalingParameters Params);
+
+    /**
+     * Callback fired once remote SDP is received.
+     */
+    Void onRemoteDescription(final SessionDescription Sdp);
+
+    /**
+     * Callback fired once remote Ice candidate is received.
+     */
+    Void onRemoteIceCandidate(final IceCandidate Candid);
+
+    /**
+     * Callback fired once remote Ice candidate removals are received.
+     */
+    Void onRemoteIceCandidatesRemoved(final IceCandidate[] candidates);
+
+    /**
+     * Callback fired once channel is closed.
+     */
+    Void onChannelClose();
+
+    /**
+     * Callback fired once channel error happened.
+     */
+    Void onChannelError(final String Description);
+  }
+}
+
+
+mainly defines how to handle connect, disconnect, and how to register SDP and ICE candidate. After determining the connection is successful, AppRTCClient is responsible for calling onConnectedToRoom to notify CallActivity that it is ready to establish a video call, and is responsible for If the Signal server (here is firebase) has a remote SDP and ICE candidate, it is responsible for calling SignalingEvents (this will call CallActivity, and CallActivity will use PeerConnectionClient to handle the need to pass to PeerConnection). The parameters of the
+Firebase processing Signaling here is to monitor a key change, there is a new device connection, register SDP, ICE Candidate, write below, this is actually not a good way, because this is below As long as there is a change in value, it will trigger, unlike the WebSocket version, which is a one-to-one API call, and you don't know which part of the trigger is changed each time. PeerConnection repeatedly registers SDP several times at the beginning. Let me find the problem of being called repeatedly for this reason
+TURN server
+WebR TC is P2P, so if you don't have the ability to penetrate the wall, it will be blocked outside the wall. At first, I originally wanted to test the P2P without going through the TURN Server (because I was too lazy to stand one). As a result, I was always unable to connect to the test. Later, I found out that I was dumb. My test environment was a physical mobile phone, and the other was a computer running simulator. I thought that two (mobile phones, computers) were the same network. The problem, I later realized that the simulator is on another virtual network, so there is still a need for the TURN server.
+If you don't want to have one, what should you do? With Google free, they made this demo, there must be! So peek After a bit of WebRTCClient's code and transfer content, I found itwithhttps://networktraversal.googleapis.com/v1alpha/iceconfig?key=AIzaSyAJdh2HkajseEIltlZ3SIXO02Tze9sO3NY to goto TURN server list, so basically just copy the following paragraph:
+  Private LinkedList<PeerConnection.IceServer> requestTurnServers(String Url)
+            Throws IOException, JSONException {
+        LinkedList<PeerConnection.IceServer> turnServers = New LinkedList<PeerConnection.IceServer>();
+        Log.d(TAG, "Request TURN from: " + Url);
+        HttpURLConnection Connection = (HttpURLConnection) New URL(url).openConnection();
+        Connection.setDoOutput(true);
+        Connection.setRequestProperty("REFERER", "https://appr.tc");
+        Connection.setConnectTimeout(TURN_HTTP_TIMEOUT_MS);
+        Connection.setReadTimeout(TURN_HTTP_TIMEOUT_MS);
+        Int responseCode = Connection.getResponseCode();
+        If (responseCode != 200) {
+            Throw New IOException("Non-200 response when requesting TURN server from " + Url + " : "
+                    + Connection.getHeaderField(null));
+        }
+        InputStream responseStream = Connection.getInputStream();
+        String Response = drainStream(responseStream);
+        Connection.disconnect();
+        Log.d(TAG, "TURN response: " + Response);
+        JSONObject responseJSON = New JSONObject(response);
+        JSONArray iceServers = responseJSON.getJSONArray("iceServers");
+        For (int i = 0; i < iceServers.length(); ++i) {
+            JSONObject Server = iceServers.getJSONObject(i);
+            JSONArray turnUrls = Server.getJSONArray("urls");
+            String Username = Server.has("username") ? Server.getString("username") : "";
+            String Credential = Server.has("credential") ? Server.getString("credential") : "";
+            For (int j = 0; j < turnUrls.length(); j++) {
+                String turnUrl = turnUrls.getString(j);
+                turnServers.add(new PeerConnection.IceServer(turnUrl, Username, Credential));
+            }
+        }
+        Return turnServers;
+    }
+
+    // Return the contents of an InputStream as a String.
+    Private Static String drainStream(InputStream In) {
+        Scanner s = New Scanner(in).useDelimiter("\\A");
+        Return s.hasNext() ? s.next() : "";
+    }
+
+
+Take the list taken here as an ICE candidate, you can successfully go through the wall through Google's TURN server (long-term plan is to set up one of them)
