@@ -5,7 +5,8 @@ It is an industry standard (W3C, IETF). Recently, I have studied this thing beca
 
 Switching the Web RTC segment to Firebase (well, I actually regretted choosing Firebase to implement it) is actually replacing the Signaling section, and the process is 
 
-#Image 
+#ImageCheck for Model.png from the Repository 
+
 
 This part is actually the process of exchanging SDP and ICE candidate on  both sides 
 here WebRTC abbreviated terms related to introduction: http://blog.mozilla.com.tw/posts/3261/webrtc-%E7%9B%B8%E9%97%9C%E7%B8%AE%E5%AF%AB%E5%90%8D%E8%A9%9E%E7%B0%A1%E4%BB%8B
